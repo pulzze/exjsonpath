@@ -43,13 +43,34 @@ defmodule ExJSONPath do
   ## Examples
 
     iex> ExJSONPath.eval(%{"a" => %{"b" => 42}}, "$.a.b")
-    {:ok, [42]}
+    {:ok, 42}
 
     iex> ExJSONPath.eval([%{"v" => 1}, %{"v" => 2}, %{"v" => 3}], "$[?(@.v > 1)].v")
     {:ok, [2, 3]}
 
     iex> ExJSONPath.eval(%{"a" => %{"b" => 42}}, "$.x.y")
-    {:ok, []}
+    {:ok, nil}
+
+    iex> data = %{ "a" => %{ "b" => 42 }, "arr" => [%{ "obj" => %{ "val" => 1 } }, %{ "obj" => %{ "val" => 2 } }, %{ "obj" => %{ "val" => 3 } }] }
+    iex> ExJSONPath.eval(data, "$.arr")
+    {:ok,
+    [
+      %{"obj" => %{"val" => 1}},
+      %{"obj" => %{"val" => 2}},
+      %{"obj" => %{"val" => 3}}
+    ]}
+
+    iex> data = %{ "a" => %{ "b" => 42 }, "arr" => [%{ "obj" => %{ "val" => 1 } }, %{ "obj" => %{ "val" => 2 } }, %{ "obj" => %{ "val" => 3 } }] }
+    iex> ExJSONPath.eval(data, "$.arr..obj")
+    {:ok, [%{"val" => 1}, %{"val" => 2}, %{"val" => 3}]}
+
+    iex> data = %{ "a" => %{ "b" => 42 }, "arr" => [%{ "obj" => %{ "val" => 1 } }, %{ "obj" => %{ "val" => 2 } }, %{ "obj" => %{ "val" => 3 } }] }
+    iex> ExJSONPath.eval(data, "$.arr..obj.val")
+    {:ok, [1, 2, 3]}
+
+    iex> data = %{ "a" => %{ "b" => 42 }, "arr" => [%{ "obj" => %{ "val" => 1 } }, %{ "obj" => %{ "val" => 2 } }, %{ "obj" => %{ "val" => 3 } }] }
+    iex> ExJSONPath.eval(data, "$.arr[?(@.obj.val < 3)].obj.val")
+    {:ok, [1, 2]}
   """
   @spec eval(term(), String.t() | compiled_path()) ::
           {:ok, list(term())} | {:error, ParsingError.t()}
@@ -70,15 +91,15 @@ defmodule ExJSONPath do
 
     iex> map = %{"a" => %{"b" => 42}}
     iex> ExJSONPath.eval(map, map["a"], "@.b")
-    {:ok, [42]}
+    {:ok, 42}
 
     iex> map = %{"a" => %{"b" => 42}}
     iex> ExJSONPath.eval(map, map["a"], "$.a.b")
-    {:ok, [42]}
+    {:ok, 42}
 
     iex> map = %{"a" => %{"b" => 42}}
     iex> ExJSONPath.eval(map, map["a"], "b")
-    {:ok, [42]}
+    {:ok, 42}
   """
   def eval(root, input, path) when is_binary(path) do
     with {:ok, compiled} <- compile(path) do
@@ -174,20 +195,20 @@ defmodule ExJSONPath do
     descent_results =
       Enum.reduce(enumerable, [], fn
         {_key, item}, acc ->
-          acc ++ [recurse(root, item, path)]
+          acc ++ recurse(root, item, path)
 
         item, acc ->
-          acc ++ [recurse(root, item, path)]
+          acc ++ recurse(root, item, path)
       end)
 
     case safe_fetch(enumerable, a) do
-      {:ok, item} -> recurse(root, item, t) ++ descent_results
+      {:ok, item} -> [recurse(root, item, t) | descent_results]
       :error -> descent_results
     end
   end
 
   defp recurse(_root, _any, [{:recurse, _a} | _t]),
-    do: nil
+    do: []
 
   defp recurse(_root, map, [{:slice, _first, _last, _step} | _t]) when is_map(map),
     do: nil
